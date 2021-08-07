@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudformationTemplate for Api Gateway List SSM
+
+Parameters:
+  ApplicationDescription:
+    Type: String
+  ApplicationName:
+    Type: String
+  ContinousNumber:
+    Type: String
+  CostReference:
+    Type: String
+  Creator:
+    Type: String
+  CustomerContactMail:
+    Type: String
+  Environment:
+    Type: String
+    AllowedValues:
+      - dev
+      - prd
+  Filepath:
+    Type: String
+  Handler:
+    Type: String
+  Lambda:
+    Type: String
+  Memory:
+    Type: Number
+    MinValue: 128
+  ProjectShortName:
+    Type: String
+    Description: For which project is this infrastructure?
+  Runtime:
+    Type: String
+  S3Bucket:
+    Type: String
+  TicketReference:
+    Type: String
+  Timeout:
+    Type: Number
+    MinValue: 1
+    MaxValue: 900
+  VpcEndpointId:
+    Type: String
+
+Resources:
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Description: !Join [' ', [LambdaFunction for, !Ref ApplicationDescription]]
+      Name: !Join ['', [agw, !Ref ProjectShortName, !Ref Environment, !Ref ApplicationName, !Ref ContinousNumber]]
+      Tags:
+        - Key: "Creator"
+          Value: !Ref Creator
+        - Key: "ApplicationName"
+          Value: !Ref ApplicationName
+        - Key: "ProjectShortName"
+          Value: !Ref ProjectShortName
+        - Key: "CostReference"
+          Value: !Ref CostReference
+        - Key: "Environment"
+          Value: !Ref Environment
+        - Key: "TicketReference"
+          Value: !Ref TicketReference
+        - Key: "PipelineManaged"
+          Value: "True"
+      EndpointConfiguration:
+        Types:
+          - "PRIVATE"
+        VpcEndpointIds:
+          - !Ref VpcEndpointId
+      Policy: !Join [ "", [ '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"execute-api:Invoke","Resource":["execute-api:/*"],"Condition":{"StringEquals":{"aws:SourceVpce":"', !Ref VpcEndpointId, '"}}}]}' ] ]
+
+  ApiGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    DependsOn:
+      - LambdaFunction
+    Properties:
+      ApiKeyRequired: true
+      AuthorizationType: "None"
+      HttpMethod: "POST"
+      Integration:
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - StatusCode: 200
+        Type: "AWS"
+        Uri: !Join ['', ['arn:aws:apigateway:',  !Ref "AWS::Region", ':lambda:path/2015-03-31/functions/', !GetAtt LambdaFunction.Arn, '/invocations' ]]
+      MethodResponses:
+        - StatusCode: 200
+      ResourceId: !GetAtt ApiGateway.RootResourceId
+      RestApiId: !Ref ApiGateway
+
+  ApiGatewayDeployment:
+    Type: "AWS::ApiGateway::Deployment"
+    DependsOn:
+      - ApiGatewayMethod
+      - ApiGateway
+    Properties:
+      RestApiId: !Ref ApiGateway
+      StageName: !Ref Environment
+
+  ApiGatewayUsagePlan:
+    DependsOn:
+      - ApiGatewayKey
+      - ApiGatewayDeployment
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      ApiStages:
+        - ApiId: !Ref ApiGateway
+          Stage: !Ref Environment
+      Description: !Join [' ', [UsagePlan for, !Ref ApplicationDescription]]
+      Tags:
+        - Key: "Creator"
+          Value: !Ref Creator
+        - Key: "ApplicationName"
+          Value: !Ref ApplicationName
+        - Key: "ProjectShortName"
+          Value: !Ref ProjectShortName
+        - Key: "CostReference"
+          Value: !Ref CostReference
+        - Key: "Environment"
+          Value: !Ref Environment
+        - Key: "TicketReference"
+          Value: !Ref TicketReference
+        - Key: "PipelineManaged"
+          Value: "True"
+      UsagePlanName: !Join ['', [agwusageplan, !Ref ProjectShortName, !Ref Environment, !Ref ApplicationName, !Ref ContinousNumber]]
+
+  ApiGatewayKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Description: !Join [' ', [ApiKey for, !Ref ApplicationDescription]]
+      Enabled: true
+      Name: !Join ['', [agwkey, !Ref ProjectShortName, !Ref Environment, !Ref ApplicationName, !Ref ContinousNumber]]
+      Tags:
+        - Key: "Creator"
+          Value: !Ref Creator
+        - Key: "ApplicationName"
+          Value: !Ref ApplicationName
+        - Key: "ProjectShortName"
+          Value: !Ref ProjectShortName
+        - Key: "CostReference"
+          Value: !Ref CostReference
+        - Key: "Environment"
+          Value: !Ref Environment
+        - Key: "TicketReference"
+          Value: !Ref TicketReference
+        - Key: "PipelineManaged"
+          Value: "True"
+
+  ApiGatewayUsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    DependsOn:
+      - ApiGatewayUsagePlan
+      - ApiGatewayKey
+    Properties:
+      KeyId: !Ref ApiGatewayKey
+      KeyType: "API_KEY"
+      UsagePlanId: !Ref ApiGatewayUsagePlan
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - LambdaRole
+      - SSMListPolicy
+    Properties:
+      Code:
+        S3Bucket: !Ref S3Bucket
+        S3Key: !Join ['', [!Ref Filepath, !Ref Lambda]]
+      Description: !Join [' ', [LambdaFunction for, !Ref ApplicationDescription]]
+      Environment:
+        Variables:
+          customer: !Ref ProjectShortName
+          environment: !Ref Environment
+      FunctionName: !Join ['', [lambda, !Ref ProjectShortName, !Ref Environment, !Ref ApplicationName, !Ref ContinousNumber]]
+      Handler: !Ref Handler
+      MemorySize: !Ref Memory
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: !Ref Runtime
+      Tags:
+        - Key: "Creator"
+          Value: !Ref Creator
+        - Key: "ApplicationName"
+          Value: !Ref ApplicationName
+        - Key: "ProjectShortName"
+          Value: !Ref ProjectShortName
+        - Key: "CostReference"
+          Value: !Ref CostReference
+        - Key: "Environment"
+          Value: !Ref Environment
+        - Key: "TicketReference"
+          Value: !Ref TicketReference
+        - Key: "PipelineManaged"
+          Value: "True"
+      Timeout: !Ref Timeout
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ['', [iar, !Ref ProjectShortName, !Ref Environment, !Ref ApplicationName, !Ref ContinousNumber]]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: lambda.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Tags:
+        - Key: "Creator"
+          Value: !Ref Creator
+        - Key: "ApplicationName"
+          Value: !Ref ApplicationName
+        - Key: "ProjectShortName"
+          Value: !Ref ProjectShortName
+        - Key: "CostReference"
+          Value: !Ref CostReference
+        - Key: "Environment"
+          Value: !Ref Environment
+        - Key: "TicketReference"
+          Value: !Ref TicketReference
+        - Key: "PipelineManaged"
+          Value: "True"
+
+  SSMListPolicy:
+    Type: AWS::IAM::Policy
+    DependsOn:
+      - LambdaRole
+    Properties:
+      PolicyName: !Join ['', [iap, !Ref ProjectShortName, !Ref Environment, !Ref ApplicationName , !Ref ContinousNumber]]
+      Roles:
+        - !Ref LambdaRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - ssm:DescribeParameters
+            Resource: "*"
+
+  LambdaInvokePermission:
+    DependsOn:
+      - LambdaFunction
+      - ApiGateway
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaFunction.Arn
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Join ['', [!Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/", !Ref Environment, "/POST/"]]
+
+Outputs:
+  ApiGatewayID:
+    Description: ID of the API Gateway
+    Value: !Ref ApiGateway
+    Export:
+      Name: !Join ['', [agw, !Ref ProjectShortName, !Ref Environment, !Ref ApplicationName, !Ref ContinousNumber, '-id']]
+  ApiKeyID:
+    Description: ID of the API Key
+    Value: !Ref ApiGatewayKey
+    Export:
+      Name: !Join [ '', [ agwkey, !Ref ProjectShortName, !Ref Environment, !Ref ApplicationName, !Ref ContinousNumber, '-id' ] ]

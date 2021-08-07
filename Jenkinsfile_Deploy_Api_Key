@@ -1,0 +1,25 @@
+pipeline {
+    agent {
+        docker { image 'trubridge/buildimage:1.0' }
+    }
+    stages {
+        stage('Checkout Sources') {
+            steps {
+                sh "rm -rf cf_serverless_restapi"
+                withCredentials([usernamePassword(credentialsId: 'XXXX', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                    sh 'git clone -b ${Branch} https://${USERNAME}:${PASSWORD}@github.com/TruBridge/cf_serverless_restapi.git'
+                }
+            }
+        }
+        stage('Deploy Stack') {
+            steps {
+                sh "chmod +x deploy_stack_api_key.sh && ./deploy_stack_api_key.sh"
+            }
+        }
+        stage('Cleanup') {
+            steps {
+                sh "rm -rf cf_serverless_restapi"
+            }
+        }
+    }
+}
