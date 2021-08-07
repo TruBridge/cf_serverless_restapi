@@ -11,9 +11,9 @@ pipeline {
                 }
             }
         }
-        stage('Destroy Stack') {
+        stage('Deploy Stack') {
             steps {
-                sh "chmod +x destroy_stack_api_key.sh && ./destroy_stack_api_key.sh"
+                sh "chmod +x deploy_stack_iam_auth.sh && ./deploy_stack_iam_auth.sh"
             }
         }
         stage('Cleanup') {

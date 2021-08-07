@@ -14,12 +14,14 @@ The pipeline automatically builds a zip from the required sources and loads the 
 
 The RestApi gateway is set up together with the ApiKey and usage plan. Authorisation is therefore carried out via this key. IAM Auth was explicitly omitted, as Curl, for example, is not able to attract the instance profile.
 Both ApiKey and the URL of the RestApi gateway are saved in the specific customer area in the SSM by the pipeline:<br>
-`/${ProjectShortName}/${Environment}/ssm/${ContinousNumber}/listparams/apiGwUrl`<br>
-`/${ProjectShortName}/${Environment}/ssm/${ContinousNumber}/listparams/apiGwApiKey`
+`/${ProjectShortName}/customer/${Environment}/ssm/${ContinousNumber}/listparams/apiGwUrl`<br>
+`/${ProjectShortName}/customer/${Environment}/ssm/${ContinousNumber}/listparams/apiGwApiKey`
 
 #### IAM Auth
 
-//TODO
+Authorisation is through instance profile. You need to use a tool that provides instance profile capabilities.<br>
+The URL of the RestApi gateway is saved in the specific customer area in the SSM by the pipeline:<br>
+`/${ProjectShortName}/customer/${Environment}/ssm/${ContinousNumber}/listparams/apiGwUrl`
 
 ### Lambda
 
@@ -36,4 +38,29 @@ You can call the RestApi as follows:<br>
 
 ### IAM Auth
 
-//TODO
+First: attach a valid IAM role to an EC2 instance.<br>
+Second: Use following code on the EC2 instance:<br>
+```
+import requests
+import boto3
+from aws_requests_auth.aws_auth import AWSRequestsAuth
+
+destinationhost=input("Please enter the destinationhost: ")
+stage=input("Please enter the stage: ")
+region=input("Please enter the region: ")
+
+boto3.setup_default_session(region_name=region)
+session = boto3.Session()
+credentials = session.get_credentials()
+
+auth = AWSRequestsAuth(aws_access_key=credentials.access_key,
+aws_secret_access_key=credentials.secret_key,
+aws_token=credentials.token,
+aws_host=str(destinationhost),
+aws_region=str(region),
+aws_service='execute-api')
+
+print(requests.request('POST', 'https://' + str(destinationhost) + '/' + str(stage) + '/', auth=auth).text)
+```
+and execute the code by:<br>
+`python {filename}`
